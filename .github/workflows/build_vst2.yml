@@ -13,7 +13,7 @@ jobs:
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
       
-    - name: Clone and Build (Ignore Test Errors)
+    - name: Clone and List Projects
       run: |
         git clone https://github.com/vaisest/noise-suppression-for-voice.git
         cd noise-suppression-for-voice
@@ -24,23 +24,26 @@ jobs:
         # Конфигурируем проект
         cmake .. -G "Visual Studio 17 2022" -A x64
         
-        # Собираем только основные цели, пропускаем тесты
-        cmake --build . --config Release --target noise_suppression --target noise_suppression_vst3 || echo "Some targets failed, but continuing..."
+        # Смотрим какие проекты есть
+        echo "=== AVAILABLE PROJECTS ==="
+        dir *.vcxproj
         
-    - name: Find and List DLL Files
+    - name: Build ALL Projects
       run: |
-        echo "=== ALL DLL FILES ==="
+        cd noise-suppression-for-voice/build
+        
+        # Собираем ВСЕ проекты
+        cmake --build . --config Release --parallel 4
+        
+    - name: Find All Built Files
+      run: |
+        echo "=== ALL BUILT FILES ==="
         dir noise-suppression-for-voice\build\ /s *.dll
+        dir noise-suppression-for-voice\build\ /s *.exe
         dir noise-suppression-for-voice\build\ /s *.vst3
         
-        echo "=== RELEASE FOLDER ==="
-        dir noise-suppression-for-voice\build\Release\ /s
-        
-    - name: Upload DLL Files
+    - name: Upload Everything
       uses: actions/upload-artifact@v4
       with:
-        name: noise-suppression-dll
-        path: |
-          noise-suppression-for-voice/build/Release/*.dll
-          noise-suppression-for-voice/build/Release/*.vst3
-        if-no-files-found: warn
+        name: all-built-files
+        path: noise-suppression-for-voice/build/
