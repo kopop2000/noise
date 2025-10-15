@@ -1,148 +1,36 @@
-name: Build Noise Suppression VST2 Plugin
+name: Build VST2 Plugin
 
-on:
-  workflow_dispatch:  # Разрешает ручной запуск
-  push:
-    branches: [ main, master ]
-  schedule:
-    - cron: '0 0 * * 0'  # Автосборка раз в неделю
-
-env:
-  BUILD_TYPE: Release
-  VST2_SDK_URL: https://github.com/robbert-vdh/nih-plug/archive/refs/heads/main.zip
+on: [workflow_dispatch]
 
 jobs:
-  build-windows:
+  build:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        arch: [x64, Win32]
     
     steps:
-    - name: Checkout current repository
+    - name: Checkout
       uses: actions/checkout@v4
       
-    - name: Clone Noise Suppression Repository
-      run: |
-        git clone https://github.com/vaisest/noise-suppression-for-voice.git
-        cd noise-suppression-for-voice
-        git log -1 --oneline
-      
-    - name: Setup Build Environment
+    - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
       
-    - name: Install Dependencies
-      run: |
-        # Устанавливаем CMake
-        choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
-        # Скачиваем пример VST2 SDK
-        curl -L ${{ env.VST2_SDK_URL }} -o vst2_sdk.zip
-        7z x vst2_sdk.zip -o.vst2_sdk
-      
-    - name: Configure Project
-      run: |
-        cd noise-suppression-for-voice
-        mkdir build_${{ matrix.arch }}
-        cd build_${{ matrix.arch }}
-        cmake .. ^
-          -G "Visual Studio 17 2022" ^
-          -A ${{ matrix.arch }} ^
-          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} ^
-          -DBUILD_VST_PLUGIN=ON ^
-          -DBUILD_VST3=OFF ^
-          -DBUILD_STANDALONE=OFF ^
-          -DENABLE_GRAPHICAL_UI=ON ^
-          -DVST2_SDK_PATH="${{ github.workspace }}/.vst2_sdk" ^
-          -DUSE_AVX2=ON ^
-          -DUSE_SSE4=ON ^
-          -DLOW_LATENCY=ON
-      
-    - name: Build Project
-      run: |
-        cd noise-suppression-for-voice/build_${{ matrix.arch }}
-        cmake --build . --config ${{ env.BUILD_TYPE }} --parallel 4
-      
-    - name: List Built Files
-      run: |
-        echo "=== Built files ==="
-        dir noise-suppression-for-voice\build_${{ matrix.arch }}\ /s
-        dir noise-suppression-for-voice\build_${{ matrix.arch }}\Release\ /s
-        dir noise-suppression-for-voice\build_${{ matrix.arch }}\bin\ /s 2>nul || echo "No bin directory"
-      
-    - name: Upload VST2 Plugin
-      uses: actions/upload-artifact@v4
-      with:
-        name: noise-suppression-vst2-${{ matrix.arch }}
-        path: |
-          noise-suppression-for-voice/build_${{ matrix.arch }}/Release/*.dll
-          noise-suppression-for-voice/build_${{ matrix.arch }}/Release/*.vst
-          noise-suppression-for-voice/build_${{ matrix.arch }}/bin/Release/*.dll
-        retention-days: 30
-        if-no-files-found: error
-  
-  build-linux:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Build Linux Version
+    - name: Clone and Build
       run: |
         git clone https://github.com/vaisest/noise-suppression-for-voice.git
         cd noise-suppression-for-voice
-        mkdir build && cd build
-        cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_LV2=ON
-        make -j4
-
-  create-release:
-    needs: [build-windows, build-linux]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    
-    steps:
-    - name: Download All Artifacts
-      uses: actions/download-artifact@v4
-      
-    - name: Create Release Package
-      run: |
-        mkdir -p release_package
-        cp -r noise-suppression-vst2-* release_package/
         
-        # Создаем README с инструкцией
-        cat > release_package/README.txt << EOF
-        Noise Suppression VST2 Plugin for EqualizerAPO
+        mkdir build
+        cd build
         
-        ИНСТРУКЦИЯ ПО УСТАНОВКЕ:
+        # Простая конфигурация
+        cmake .. -G "Visual Studio 17 2022" -A x64
         
-        1. Для 64-битной системы используйте файлы из папки x64
-        2. Для 32-битной системы - из папки Win32  
-        3. Скопируйте файл .dll в папку с VST плагинами
-        4. В EqualizerAPO Configurator добавьте:
-           Plugin: VST:noise_suppression.dll
-        5. Нажмите "Edit" для открытия графического интерфейса
+        # Сборка только основных целей
+        cmake --build . --config Release --target noise_suppression
         
-        Доступные настройки:
-        - Уровень шумоподавления
-        - Режимы работы (Агрессивный/Умеренный/Легкий)
-        - Сохранение тембра голоса
-        - Визуализация спектра
-        
-        Поддерживаемые ОС: Windows 10/11 (64-bit и 32-bit)
-        EOF
-        
-        # Архивируем всё
-        7z a -r noise_suppression_vst2.zip release_package/*
-      
-    - name: Upload Final Release
+    - name: Upload Results
       uses: actions/upload-artifact@v4
       with:
-        name: noise-suppression-final-release
-        path: noise_suppression_vst2.zip
-        retention-days: 90
-
-  notify:
-    needs: [create-release]
-    runs-on: ubuntu-latest
-    steps:
-    - name: Notify Completion
-      run: |
-        echo "🎉 Сборка VST2 плагина завершена!"
-        echo "📦 Скачайте готовые файлы из раздела Artifacts"
-        echo "🔧 Архив: noise-suppression-final-release.zip"
+        name: noise-suppression-files
+        path: |
+          noise-suppression-for-voice/build/Release/*.dll
+          noise-suppression-for-voice/build/Release/*.exe
