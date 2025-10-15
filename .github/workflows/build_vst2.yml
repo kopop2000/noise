@@ -21,16 +21,23 @@ jobs:
         mkdir build
         cd build
         
-        # Простая конфигурация
+        # Конфигурируем проект
         cmake .. -G "Visual Studio 17 2022" -A x64
         
-        # Сборка только основных целей
-        cmake --build . --config Release --target noise_suppression
+        # Собираем ВСЕ цели, а не конкретную
+        cmake --build . --config Release --parallel 4
+        
+    - name: Find Built Files
+      run: |
+        # Ищем все собранные DLL файлы
+        echo "=== Searching for DLL files ==="
+        dir noise-suppression-for-voice\build\Release\*.dll /s
+        dir noise-suppression-for-voice\build\bin\*.dll /s 2>nul || echo "No bin directory"
         
     - name: Upload Results
       uses: actions/upload-artifact@v4
       with:
-        name: noise-suppression-files
+        name: noise-suppression-build
         path: |
-          noise-suppression-for-voice/build/Release/*.dll
-          noise-suppression-for-voice/build/Release/*.exe
+          noise-suppression-for-voice/build/Release/
+          noise-suppression-for-voice/build/bin/
